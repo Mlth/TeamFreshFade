@@ -4,8 +4,8 @@ module internal Eval
 
     open StateMonad
 
-    let add a b = failwith "Not implemented"      
-    let div a b = failwith "Not implemented"      
+    let add a b = failwith "Not implemented"
+    let div a b = failwith "Not implemented"
 
     type aExp =
         | N of int

@@ -1,4 +1,4 @@
-﻿module multiset
+﻿module MultiSet
 
 type MultiSet<'a when 'a: comparison> = R of Map<'a, uint32>
 
