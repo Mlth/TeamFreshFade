@@ -70,5 +70,23 @@ module internal StateMonad
               | Some v -> Success (v, s)
               | None   -> Failure (VarNotFound x))
 
-    let declare (var : string) : SM<unit> = failwith "Not implemented"   
-    let update (var : string) (value : int) : SM<unit> = failwith "Not implemented"      
+    let declare (var : string) : SM<unit> =
+        S (fun s ->
+            match s with
+            | _ when List.isEmpty s.vars -> Failure(ReservedName var)
+            | _ when Set.contains var s.reserved -> Failure(ReservedName var)
+            | _ when List.item 0 s.vars |> Map.containsKey var -> Failure(VarExists var)
+            | _ -> Success((), {s with vars = (List.head s.vars |> Map.add var 0) :: List.tail s.vars}))   
+   
+    let update (var : string) (value : int) : SM<unit> = 
+        let rec aux (vars: Map<'a, 'b> list) index =
+            match vars with
+            | []      -> None
+            | m :: ms -> 
+                match Map.tryFind var m with
+                | Some v -> Some index 
+                | None   -> aux ms (index+1)
+        S (fun s -> 
+              match aux s.vars 0 with
+              | Some index -> Success ((),{s with vars = List.mapi (fun i x -> if i = index then Map.add var value x else x) s.vars})
+              | None   -> Failure (VarNotFound var))      
