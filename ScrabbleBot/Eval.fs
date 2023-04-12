@@ -4,8 +4,8 @@ module internal Eval
 
     open StateMonad
 
-    let add a b = failwith "Not implemented"
-    let div a b = failwith "Not implemented"
+    let add a b = a >>= (fun num1 -> b >>= (fun num2 -> ret (num1+num2)))
+    let div a b = a >>= (fun num1 -> b >>= (fun num2 -> if num2 = 0 then fail DivisionByZero else ret (num1/num2)))
 
     type aExp =
         | N of int
@@ -57,12 +57,44 @@ module internal Eval
     let (.>=.) a b = ~~(a .<. b)                (* numeric greater than or equal to *)
     let (.>.) a b = ~~(a .=. b) .&&. (a .>=. b) (* numeric greater than *)    
 
-    let arithEval a : SM<int> = failwith "Not implemented"      
+    let binop f a b =
+        a >>= (fun num1 -> b >>= (fun num2 -> ret (f num1 num2)))
 
-    let charEval c : SM<char> = failwith "Not implemented"      
+    let rec arithEval a : SM<int> = 
+        match a with
+        | N n -> ret n
+        | V v -> lookup v
+        | WL -> wordLength
+        | PV exp -> (arithEval exp >>= (fun l -> pointValue l))
+        | Add (a, b) -> binop (+) (arithEval a) (arithEval b)
+        | Sub (a, b) -> binop (-) (arithEval a) (arithEval b)
+        | Mul (a, b) -> binop (*) (arithEval a) (arithEval b)
+        | Div (a, b) -> div (arithEval a) (arithEval b)
+        | Mod (a, b) -> arithEval b >>= (fun denom -> if denom = 0 then fail DivisionByZero else binop (%) (arithEval a) (arithEval b))
+        | CharToInt c -> charEval c >>= (fun char -> arithEval (N (int char)))
 
-    let boolEval b : SM<bool> = failwith "Not implemented"
+    and charEval c : SM<char> = 
+        match c with
+        | C c -> ret c
+        | CV cv -> arithEval cv >>= (fun value -> characterValue value)
+        | ToUpper c -> charEval c >>= (fun char -> ret (System.Char.ToUpper char))
+        | ToLower c -> charEval c >>= (fun char -> ret (System.Char.ToLower char))
+        | IntToChar a -> arithEval a >>= (fun num -> charEval (C (char num)))
 
+    and boolEval b : SM<bool> = 
+        match b with
+        | TT -> ret true
+        | FF -> ret false
+        | AEq (a, b) -> binop (=) (arithEval a) (arithEval b) 
+        | ALt (a, b) -> binop (<) (arithEval a) (arithEval b)
+        | Not (b) -> boolEval b >>= (fun bool -> ret (not bool))
+        | Conj (a, b) -> boolEval a >>= (fun b1 -> boolEval b >>= (fun b2 -> ret (b1 && b2)))
+        | IsVowel (c) -> 
+                charEval c >>= (fun char ->
+                let vowels = "aeiouyæøå"
+                if vowels.Contains(System.Char.ToLower(char)) then ret true else ret false)
+        | IsConsonant (c) ->
+                boolEval (Not (IsVowel c))                
 
     type stm =                (* statements *)
     | Declare of string       (* variable declaration *)
@@ -75,7 +107,6 @@ module internal Eval
     let rec stmntEval stmnt : SM<unit> = failwith "Not implemented"
 
 (* Part 3 (Optional) *)
-
     type StateBuilder() =
 
         member this.Bind(f, x)    = f >>= x
@@ -92,8 +123,7 @@ module internal Eval
 
     let stmntEval2 stm = failwith "Not implemented"
 
-(* Part 4 *) 
-
+(* Part 4 *)
     type word = (char * int) list
     type squareFun = word -> int -> int -> Result<int, Error>
 
