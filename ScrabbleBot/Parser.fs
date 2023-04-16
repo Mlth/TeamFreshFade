@@ -10,63 +10,85 @@ module internal Parser
     open Eval
     open FParsecLight.TextParser     // Industrial parser-combinator library. Use for Scrabble Project.
     
-    
-    let pIntToChar  = pstring "not implemented"
-    let pPointValue = pstring "not implemented"
+    let pIntToChar  = pstring "intToChar"
+    let pPointValue = pstring "pointValue"
 
-    let pCharToInt  = pstring "not implemented"
-    let pToUpper    = pstring "not implemented"
-    let pToLower    = pstring "not implemented"
-    let pCharValue  = pstring "not implemented"
+    let pCharToInt  = pstring "charToInt"
+    let pToUpper    = pstring "toUpper"
+    let pToLower    = pstring "toLower"
+    let pCharValue  = pstring "charValue"
 
-    let pTrue       = pstring "not implemented"
-    let pFalse      = pstring "not implemented"
-    let pIsDigit    = pstring "not implemented"
-    let pIsLetter   = pstring "not implemented"
+    let pTrue       = pstring "true"
+    let pFalse      = pstring "false"
+    let pIsDigit    = pstring "isDigit"
+    let pIsLetter   = pstring "isLetter"
+    let pIsVowel   = pstring "isVowel"
 
-    let pif       = pstring "not implemented"
-    let pthen     = pstring "not implemented"
-    let pelse     = pstring "not implemented"
-    let pwhile    = pstring "not implemented"
-    let pdo       = pstring "not implemented"
-    let pdeclare  = pstring "not implemented"
+    let pif       = pstring "if"
+    let pthen     = pstring "then"
+    let pelse     = pstring "else"
+    let pwhile    = pstring "while"
+    let pdo       = pstring "do"
+    let pdeclare  = pstring "declare"
 
-    let whitespaceChar = pstring "not implemented"
-    let pletter        = pstring "not implemented"
-    let palphanumeric  = pstring "not implemented"
+    let whitespaceChar = satisfy (fun c -> if System.Char.IsWhiteSpace c then true else false) <?> "whitespace"
+    let pletter        = satisfy (fun c -> if System.Char.IsLetter c then true else false) <?> "letter"
+    let palphanumeric  = satisfy (fun c -> if System.Char.IsLetterOrDigit c then true else false) <?> "alphanumeric"
 
-    let spaces         = pstring "not implemented"
-    let spaces1        = pstring "not implemented"
+    let spaces         = many whitespaceChar <?> "space"
+    let spaces1        = many1 whitespaceChar <?> "space1"
 
-    let (.>*>.) _ _ = failwith "not implemented"
-    let (.>*>) _ _  = failwith "not implemented"
-    let (>*>.) _ _  = failwith "not implemented"
+    let (.>*>.) p1 p2 = p1 .>> many whitespaceChar .>>. p2
+    let (.>*>) p1 p2  = p1 .>> many whitespaceChar .>> p2
+    let (>*>.) p1 p2  = p1 .>> many whitespaceChar >>. p2
 
-    let parenthesise _ = failwith "not implemented"
+    let parenthesise p = pchar '(' >*>. p .>*> pchar ')'
 
-    let pid = pstring "not implemented"
+    let pid = 
+        pchar '_' <|> pletter .>>. many palphanumeric |>> 
+        (
+            fun c -> 
+            let ch = fst c
+            let cl = snd c
+            List.fold (fun s e -> s + System.Char.ToString e ) (System.Char.ToString ch) cl
+        )
 
-    
-    let unop _  = failwith "not implemented"
-    let binop _  = failwith "not implemented"
+    let unop p1 p2 = p1 >*>. p2
+    let binop p1 p2 p3 = p2 .>*> p1 .>*>. p3
 
     let TermParse, tref = createParserForwardedToRef<aExp>()
     let ProdParse, pref = createParserForwardedToRef<aExp>()
     let AtomParse, aref = createParserForwardedToRef<aExp>()
+    let cTermParse, ctref = createParserForwardedToRef<cExp>()
+
 
     let AddParse = binop (pchar '+') ProdParse TermParse |>> Add <?> "Add"
-    do tref := choice [AddParse; ProdParse]
+    let SubParse = binop (pchar '-') ProdParse TermParse |>> Sub <?> "Sub"
+    do tref := choice [AddParse; SubParse; ProdParse]
 
     let MulParse = binop (pchar '*') AtomParse ProdParse |>> Mul <?> "Mul"
-    do pref := choice [MulParse; AtomParse]
+    let DivParse = binop (pchar '/') AtomParse ProdParse |>> Div <?> "Div"
+    let ModParse = binop (pchar '%') AtomParse ProdParse |>> Mod <?> "Mod"
+    do pref := choice [MulParse; DivParse; ModParse; AtomParse]
 
     let NParse   = pint32 |>> N <?> "Int"
+    let VParse   = pid |>> V <?> "Var"
+    let NegParse = pchar '-' >>. NParse |>> (fun n -> Mul(N -1,n)) <?> "Neg"
     let ParParse = parenthesise TermParse
-    do aref := choice [NParse; ParParse]
+    let PVParse  = pstring "pointValue" >*>. parenthesise TermParse |>> PV <?> "PV"
+    let CTIParse = pstring "charToInt" >*>. parenthesise cTermParse |>> CharToInt <?> "CharToInt"
+    do aref := choice [ParParse; CTIParse; NegParse; PVParse; VParse; NParse]
+
+    let CParse = pchar ''' >>. satisfy (fun _ -> true) .>> pchar ''' |>> C <?> "C"
+    let CVParse = pstring "charValue" >*>. parenthesise TermParse |>> CV <?> "CV"
+    let TUParse = pstring "toUpper" >*>. parenthesise cTermParse |>> ToUpper <?> "ToUpper"
+    let TLParse = pstring "toLower" >*>. parenthesise cTermParse |>> ToLower <?> "ToLower"
+    let ITCParse = pstring "intToChar" >*>. parenthesise TermParse |>> IntToChar <?> "IntToChar"
+    do ctref := choice [CParse; CVParse; TUParse; TLParse; ITCParse]
 
     let AexpParse = TermParse 
-
-    let CexpParse = pstring "not implemented"
+    
+    let CexpParse = cTermParse
 
     let BexpParse = pstring "not implemented"
 

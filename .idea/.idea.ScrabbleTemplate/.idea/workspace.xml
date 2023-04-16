@@ -8,6 +8,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="453b20ad-bf55-4e9a-9312-75325b2fdd4a" name="Changes" comment="">
+      <change afterPath="$PROJECT_DIR$/.idea/.idea.ScrabbleTemplate/.idea/encodings.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/.idea.ScrabbleTemplate/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/.idea.ScrabbleTemplate/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ScrabbleBot/Eval.fs" beforeDir="false" afterPath="$PROJECT_DIR$/ScrabbleBot/Eval.fs" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/ScrabbleBot/MultiSet.fs" beforeDir="false" afterPath="$PROJECT_DIR$/ScrabbleBot/MultiSet.fs" afterDir="false" />
@@ -31,6 +32,7 @@
   "keyToString": {
     "RunOnceActivity.OpenProjectViewOnStart": "true",
     "RunOnceActivity.ShowReadmeOnStart": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
     "WebServerToolWindowFactoryState": "false",
     "node.js.selected.package.tslint": "(autodetect)",
     "vue.rearranger.settings.migration": "true"

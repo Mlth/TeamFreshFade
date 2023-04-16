@@ -106,23 +106,6 @@ module internal Eval
 
     let rec stmntEval stmnt : SM<unit> = failwith "Not implemented"
 
-(* Part 3 (Optional) *)
-    type StateBuilder() =
-
-        member this.Bind(f, x)    = f >>= x
-        member this.Return(x)     = ret x
-        member this.ReturnFrom(x) = x
-        member this.Delay(f)      = f ()
-        member this.Combine(a, b) = a >>= (fun _ -> b)
-        
-    let prog = new StateBuilder()
-
-    let arithEval2 a = failwith "Not implemented"
-    let charEval2 c = failwith "Not implemented"
-    let rec boolEval2 b = failwith "Not implemented"
-
-    let stmntEval2 stm = failwith "Not implemented"
-
 (* Part 4 *)
     type word = (char * int) list
     type squareFun = word -> int -> int -> Result<int, Error>
