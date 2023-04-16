@@ -112,11 +112,7 @@ module internal Eval
         | Seq (stmnt1, stmnt2) -> 
             stmntEval stmnt1 >>>= stmntEval stmnt2
         | ITE (exp, stmnt1, stmnt2) -> 
-            push >>>= boolEval exp >>= (fun bool -> 
-                if bool 
-                then stmntEval stmnt1 >>>= pop
-                else stmntEval stmnt2 >>>= pop
-            )
+            push >>>= boolEval exp >>= (fun bool -> if bool then stmntEval stmnt1 >>>= pop else stmntEval stmnt2 >>>= pop)
         | While (exp, stmnt) -> 
             push >>>= boolEval exp >>= (fun bool -> if bool then stmntEval stmnt >>>= stmntEval (While (exp, stmnt)) else ret()) >>>= pop
         
@@ -124,8 +120,11 @@ module internal Eval
     type word = (char * int) list
     type squareFun = word -> int -> int -> Result<int, Error>
 
-    let stmntToSquareFun stm = failwith "Not implemented"
-
+    let stmntToSquareFun stm =
+        fun word pos acc -> 
+            let sm = stmntEval stm >>>= lookup "_result_"
+            let state = mkState [("_pos_", pos); ("_acc_", acc); ("_result_", 0)] word ["_pos_"; "_acc_"; "_result_"]
+            evalSM state sm
 
     type coord = int * int
 
