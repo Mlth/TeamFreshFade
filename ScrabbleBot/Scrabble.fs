@@ -30,7 +30,6 @@ module RegEx =
         Seq.toList
 
  module Print =
-
     let printHand pieces hand =
         hand |>
         MultiSet.fold (fun _ x i -> forcePrint (sprintf "%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()

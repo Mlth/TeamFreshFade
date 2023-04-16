@@ -39,6 +39,14 @@ module internal Eval
        | IsVowel of cExp      (* check for vowel *)
        | IsConsonant of cExp  (* check for constant *)
 
+    type stm =                (* statements *)
+        | Declare of string       (* variable declaration *)
+        | Ass of string * aExp    (* variable assignment *)
+        | Skip                    (* nop *)
+        | Seq of stm * stm        (* sequential composition *)
+        | ITE of bExp * stm * stm (* if-then-else statement *)
+        | While of bExp * stm     (* while statement *)
+
     let (.+.) a b = Add (a, b)
     let (.-.) a b = Sub (a, b)
     let (.*.) a b = Mul (a, b)
@@ -96,17 +104,23 @@ module internal Eval
         | IsConsonant (c) ->
                 boolEval (Not (IsVowel c))                
 
-    type stm =                (* statements *)
-    | Declare of string       (* variable declaration *)
-    | Ass of string * aExp    (* variable assignment *)
-    | Skip                    (* nop *)
-    | Seq of stm * stm        (* sequential composition *)
-    | ITE of bExp * stm * stm (* if-then-else statement *)
-    | While of bExp * stm     (* while statement *)
-
-    let rec stmntEval stmnt : SM<unit> = failwith "Not implemented"
-
-(* Part 4 *)
+    and stmntEval stmnt : SM<unit> = 
+        match stmnt with 
+        | Declare s -> declare s
+        | Ass (s, exp) -> arithEval exp >>= (fun v -> update s v)
+        | Skip -> ret ()
+        | Seq (stmnt1, stmnt2) -> 
+            stmntEval stmnt1 >>>= stmntEval stmnt2
+        | ITE (exp, stmnt1, stmnt2) -> 
+            push >>>= boolEval exp >>= (fun bool -> 
+                if bool 
+                then stmntEval stmnt1 >>>= pop
+                else stmntEval stmnt2 >>>= pop
+            )
+        | While (exp, stmnt) -> 
+            push >>>= boolEval exp >>= (fun bool -> if bool then stmntEval stmnt >>>= stmntEval (While (exp, stmnt)) else ret()) >>>= pop
+        
+    (* Part 4 *)
     type word = (char * int) list
     type squareFun = word -> int -> int -> Result<int, Error>
 
