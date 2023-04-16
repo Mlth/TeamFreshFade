@@ -16,3 +16,4 @@
 */bin/*
 ScrabbleTemplate/Program.fs
 .fake
+.vscode
