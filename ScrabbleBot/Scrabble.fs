@@ -6,6 +6,7 @@ open ScrabbleUtil.ServerCommunication
 open System.IO
 
 open ScrabbleUtil.DebugPrint
+open MultiSet
 
 // The RegEx module is only used to parse human input. It is not used for the final product.
 
@@ -49,6 +50,14 @@ module State =
 
     let mkState b d pn h = {board = b; dict = d;  playerNumber = pn; hand = h }
 
+    let addToHand (hand : MultiSet<uint32>) (newPieces : list<uint32*uint32>) : MultiSet<uint32> = 
+        List.fold (fun acc (x, k) -> add x k acc) hand newPieces
+    
+    let removeFromHand (hand : MultiSet<uint32>) (piecesToBeRemoved : MultiSet<uint32>) : MultiSet<uint32> = 
+        subtract hand piecesToBeRemoved
+
+    let mkBoard (boardP:boardProg) = printf "not implemented"
+
     let board st         = st.board
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
@@ -75,8 +84,12 @@ module Scrabble =
 
             match msg with
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
+                debugPrint (sprintf "\nnewPieces %A\n" (newPieces))
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                let st' = st // This state needs to be updated
+                let piecesToBeRemoved:MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) empty ms             
+                let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
+                let handAfterAdd = State.addToHand handAfterRemove newPieces
+                let st' = State.mkState st.board st.dict st.playerNumber handAfterAdd
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
