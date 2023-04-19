@@ -43,12 +43,13 @@ module State =
 
     type state = {
         board         : Parser.board
+        stinkyBoard   : Map<coord, uint32>
         dict          : ScrabbleUtil.Dictionary.Dict
         playerNumber  : uint32
         hand          : MultiSet.MultiSet<uint32>
     }
 
-    let mkState b d pn h = {board = b; dict = d;  playerNumber = pn; hand = h }
+    let mkState b sb d pn h = {board = b; stinkyBoard = sb; dict = d;  playerNumber = pn; hand = h }
 
     let addToHand (hand : MultiSet<uint32>) (newPieces : list<uint32*uint32>) : MultiSet<uint32> = 
         List.fold (fun acc (x, k) -> add x k acc) hand newPieces
@@ -56,9 +57,24 @@ module State =
     let removeFromHand (hand : MultiSet<uint32>) (piecesToBeRemoved : MultiSet<uint32>) : MultiSet<uint32> = 
         subtract hand piecesToBeRemoved
 
-    let mkBoard (boardP:boardProg) = printf "not implemented"
+    let updateStinkyBoard ms boardMap =
+        List.fold (fun acc (coord, (id, (_, _))) -> Map.add coord id acc) boardMap ms
+
+    let getStartPoints (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list)list = 
+        failwith ("yo")
+
+    let getVerticalStarters (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list)list =
+        (*let predicate (c:coord) = 
+            //Hvis coord hvor y-1 er optaget, returner 
+            if Map.tryFind (
+
+            ) boardMap 
+        List.fold *)
+        failwith ("yo2")
+
 
     let board st         = st.board
+    let stinkyBoard st   = st.stinkyBoard
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
     let hand st          = st.hand
@@ -86,14 +102,26 @@ module Scrabble =
             | RCM (CMPlaySuccess(ms, points, newPieces)) ->
                 debugPrint (sprintf "\nnewPieces %A\n" (newPieces))
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
+                //UPDATE HAND
                 let piecesToBeRemoved:MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) empty ms             
                 let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
-                let st' = State.mkState st.board st.dict st.playerNumber handAfterAdd
+                //UPDATE BOARD
+                let updatedStinkyBoard =  State.updateStinkyBoard ms st.stinkyBoard
+                //GET STARTING POINTS
+                //If board is empty, bruteforce word using tiles on hand and coords for placemement.
+
+                //else
+                let startingPoints = State.getStartPoints st.stinkyBoard
+
+                let st' = State.mkState st.board updatedStinkyBoard st.dict st.playerNumber handAfterAdd
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
-                let st' = st // This state needs to be updated
+                //UPDATE BOARD
+                let updatedStinkyBoard =  State.updateStinkyBoard ms st.stinkyBoard
+
+                let st' = State.mkState st.board updatedStinkyBoard st.dict st.playerNumber st.hand
                 aux st'
             | RCM (CMPlayFailed (pid, ms)) ->
                 (* Failed play. Update your state *)
@@ -130,5 +158,5 @@ module Scrabble =
                   
         let handSet = List.fold (fun acc (x, k) -> MultiSet.add x k acc) MultiSet.empty hand
 
-        fun () -> playGame cstream tiles (State.mkState board dict playerNumber handSet)
+        fun () -> playGame cstream tiles (State.mkState board Map.empty dict playerNumber handSet)
         
