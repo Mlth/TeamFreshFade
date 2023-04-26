@@ -43,13 +43,13 @@ module State =
 
     type state = {
         board         : Parser.board
-        stinkyBoard   : Map<coord, uint32>
+        customBoard   : Map<coord, uint32>
         dict          : ScrabbleUtil.Dictionary.Dict
         playerNumber  : uint32
         hand          : MultiSet.MultiSet<uint32>
     }
 
-    let mkState b sb d pn h = {board = b; stinkyBoard = sb; dict = d;  playerNumber = pn; hand = h }
+    let mkState b sb d pn h = {board = b; customBoard = sb; dict = d;  playerNumber = pn; hand = h }
 
     let addToHand (hand : MultiSet<uint32>) (newPieces : list<uint32*uint32>) : MultiSet<uint32> = 
         List.fold (fun acc (x, k) -> add x k acc) hand newPieces
@@ -57,24 +57,59 @@ module State =
     let removeFromHand (hand : MultiSet<uint32>) (piecesToBeRemoved : MultiSet<uint32>) : MultiSet<uint32> = 
         subtract hand piecesToBeRemoved
 
-    let updateStinkyBoard ms boardMap =
+    let updateCustomBoard ms boardMap =
         List.fold (fun acc (coord, (id, (_, _))) -> Map.add coord id acc) boardMap ms
 
-    let getStartPoints (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list)list = 
-        failwith ("yo")
+    //Takes the boardMap, finds all vertical starters, and returns them as a list of truples: (coord:StartingPointOfStarter, coord:Direction, list<uint32>:ListOfTilesBeforeStarter)
+    let getVerticalStarters (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list * uint32)list =
+        let keys = (boardMap.Keys |> Seq.cast |> List.ofSeq)
+        //If tile above c is clear return true, else return false
+        let abovePredicate (c:coord) :bool = 
+            let cAbove = (fst c, snd c - 1):coord
+            let tileAbove = Map.tryFind (cAbove) boardMap
+            if tileAbove = None then true else false
+        //If tile below c is clear return true, else return false
+        let belowPredicate (c:coord) :bool =
+            let cBelow = (fst c, snd c + 1):coord
+            let tileBelow = Map.tryFind (cBelow) boardMap
+            if tileBelow = None then true else false
+        //If tile to the left of c is clear return true, else return false
+        let leftPredicate (c:coord) :bool = 
+            let cLeft  = (fst c - 1, snd c):coord
+            let tileLeft = Map.tryFind (cLeft) boardMap
+            if tileLeft = None then true else false
+        //If tile to the right of c is clear return true, else return false
+        let rightPredicate (c:coord) :bool = 
+            let cRight  = (fst c + 1, snd c):coord
+            let tileRight = Map.tryFind (cRight) boardMap
+            if tileRight = None then true else false
+        //Recursively get letters above tile
+        let rec getLettersAboveCoord (c:coord) (acc:(uint32)list) :(uint32)list =
+            let coordToInvestigate:coord = (fst c, snd c - 1)
+            if List.contains (coordToInvestigate:coord) keys
+            then getLettersAboveCoord coordToInvestigate ((Map.find coordToInvestigate boardMap)::acc)
+            else acc
+        let rec getPossibleLength (c:coord) (acc:uint32) :uint32 =
+            let coordToInvestigate:coord = (fst c, snd c + 1)
+            if belowPredicate coordToInvestigate && leftPredicate coordToInvestigate && rightPredicate coordToInvestigate && acc < 7u
+            then getPossibleLength coordToInvestigate (acc + 1u) 
+            else acc
+        let rec predicateHandler (c:coord) =
+            //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
+            if belowPredicate c && abovePredicate c 
+            then [(c, ((0, 1):coord), [Map.find c boardMap], getPossibleLength c 0u)]
+            else
+            if belowPredicate c && not (abovePredicate c) 
+            then [(c, ((0, 1):coord), getLettersAboveCoord c [Map.find c boardMap], getPossibleLength c 0u)]
+            else []
+        List.fold (fun acc c -> List.append acc (predicateHandler c)) [] keys
 
-    let getVerticalStarters (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list)list =
-        (*let predicate (c:coord) = 
-            //Hvis coord hvor y-1 er optaget, returner 
-            if Map.tryFind (
-
-            ) boardMap 
-        List.fold *)
-        failwith ("yo2")
-
+    let getStartPoints (boardMap:Map<coord, uint32>) :(coord * coord * (uint32)list * uint32)list = 
+        debugPrint(sprintf "\nboardMap %A\n" (boardMap))
+        getVerticalStarters boardMap
 
     let board st         = st.board
-    let stinkyBoard st   = st.stinkyBoard
+    let customBoard st   = st.customBoard
     let dict st          = st.dict
     let playerNumber st  = st.playerNumber
     let hand st          = st.hand
@@ -107,19 +142,20 @@ module Scrabble =
                 let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
                 //UPDATE BOARD
-                let updatedStinkyBoard =  State.updateStinkyBoard ms st.stinkyBoard
+                let updatedCustomBoard =  State.updateCustomBoard ms st.customBoard
                 //GET STARTING POINTS
                 //If board is empty, bruteforce word using tiles on hand and coords for placemement.
 
                 //else
-                let startingPoints = State.getStartPoints st.stinkyBoard
+                let startingPoints = State.getStartPoints st.customBoard
+                debugPrint(sprintf "\nStartingpoints: %A \n" (startingPoints))
 
-                let st' = State.mkState st.board updatedStinkyBoard st.dict st.playerNumber handAfterAdd
+                let st' = State.mkState st.board updatedCustomBoard st.dict st.playerNumber handAfterAdd
                 aux st'
             | RCM (CMPlayed (pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
                 //UPDATE BOARD
-                let updatedStinkyBoard =  State.updateStinkyBoard ms st.stinkyBoard
+                let updatedStinkyBoard =  State.updateCustomBoard ms st.customBoard
 
                 let st' = State.mkState st.board updatedStinkyBoard st.dict st.playerNumber st.hand
                 aux st'
