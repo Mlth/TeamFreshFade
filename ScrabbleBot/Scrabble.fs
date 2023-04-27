@@ -156,11 +156,12 @@ module Scrabble =
             if itIsMyTurn then
                 State.printStatus st
 
-                Print.printHand pieces (State.hand st)
                 //debugPrint (sprintf "\n\n\n\n\n\n\n\n\n\n\n\n\n") // Weird console clear.
 
                 forcePrint
                     $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
+
+                Print.printHand pieces (State.hand st)
 
                 // remove the force print when you move on from manual input (or when you have learnt the format)
 
