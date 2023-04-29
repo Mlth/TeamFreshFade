@@ -130,6 +130,18 @@ module State =
         debugPrint (sprintf "\nboardMap %A\n" (boardMap))
         getVerticalStarters boardMap
 
+    let getStarterOptions (starter:coord * coord * list<uint32> * uint32) (state:state) : list<list<(int * int) * (uint32 * (char * int))>> = failwith "not implmented"
+        //1. Step in to the dictionary with the letters of the starter
+
+        //2. Try to step further and construct a word with the letters contained in our hand
+    
+    let findLongestMove (moves:list<list<(int * int) * (uint32 * (char * int))>>) : list<(int * int) * (uint32 * (char * int))> = 
+        List.maxBy (fun move -> move.Length) moves
+    
+    let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) : list<(int * int) * (uint32 * (char * int))> = 
+        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> List.append (getStarterOptions starter state) acc) [] starters
+        findLongestMove allMoves
+    
     let board st = st.board
     let customBoard st = st.customBoard
     let dict st = st.dict
@@ -155,24 +167,22 @@ module Scrabble =
 
             if itIsMyTurn then
                 State.printStatus st
-
-                //debugPrint (sprintf "\n\n\n\n\n\n\n\n\n\n\n\n\n") // Weird console clear.
-
                 forcePrint
                     $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
-
                 Print.printHand pieces (State.hand st)
+                //If board is empty, bruteforce word using tiles on hand and coords for placemement.
 
+                //else
+                let startingPoints = State.getStartPoints st.customBoard
+                if itIsMyTurn then
+                    debugPrint (sprintf "Player %d: \nStartingpoints: %A \n" st.playerNumber (startingPoints))
                 // remove the force print when you move on from manual input (or when you have learnt the format)
-
                 let input = System.Console.ReadLine()
                 let move = RegEx.parseMove input
-
                 if itIsMyTurn then
                     debugPrint (
                         sprintf "Player %d: Player %d -> Server:\n%A\n" st.playerNumber (State.playerNumber st) move
                     ) // keep the debug lines. They are useful.
-
                 send cstream (SMPlay move)
 
             let msg: Response = recv cstream
@@ -193,13 +203,6 @@ module Scrabble =
                 //UPDATE BOARD
                 let updatedCustomBoard = State.updateCustomBoard ms st.customBoard
                 //GET STARTING POINTS
-                //If board is empty, bruteforce word using tiles on hand and coords for placemement.
-
-                //else
-                let startingPoints = State.getStartPoints st.customBoard
-
-                if itIsMyTurn then
-                    debugPrint (sprintf "Player %d: \nStartingpoints: %A \n" st.playerNumber (startingPoints))
 
                 let st' =
                     State.mkState
