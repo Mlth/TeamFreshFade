@@ -71,7 +71,7 @@ module State =
         List.fold (fun acc (coord, (id, (_, _))) -> Map.add coord id acc) boardMap ms
 
     //Takes the boardMap, finds all vertical starters, and returns them as a list of truples: (coord:StartingPointOfStarter, coord:Direction, list<uint32>:ListOfTilesBeforeStarter)
-    let getVerticalStarters (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
+    let getAllStarters (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
         let keys = (boardMap.Keys |> Seq.cast |> List.ofSeq)
         //If tile above c is clear return true, else return false
         let abovePredicate (c: coord) : bool =
@@ -101,8 +101,16 @@ module State =
                 getLettersAboveCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
             else
                 acc
+        
+        let rec getLettersLeftOfCoord (c: coord) (acc: (uint32) list) : (uint32) list =
+            let coordToInvestigate: coord = (fst c-1, snd c)
 
-        let rec getPossibleLength (c: coord) (acc: uint32) : uint32 =
+            if List.contains (coordToInvestigate: coord) keys then
+                getLettersLeftOfCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
+            else
+                acc
+
+        let rec getVerticalLength (c: coord) (acc: uint32) : uint32 =
             let coordToInvestigate: coord = (fst c, snd c + 1)
 
             if
@@ -111,20 +119,42 @@ module State =
                 && rightPredicate coordToInvestigate
                 && acc < 7u
             then
-                getPossibleLength coordToInvestigate (acc + 1u)
+                getVerticalLength coordToInvestigate (acc + 1u)
             else
                 acc
-
-        let rec predicateHandler (c: coord) =
+        
+        let rec getHorizontalLength (c: coord) (acc: uint32) : uint32 =
+            let coordToInvestigate: coord = (fst c + 1, snd c)
+            if
+                rightPredicate coordToInvestigate
+                && abovePredicate coordToInvestigate
+                && belowPredicate coordToInvestigate
+                && acc < 7u
+            then
+                getHorizontalLength coordToInvestigate (acc + 1u)
+            else
+                acc
+        
+        let rec verticalPredicateHandler (c: coord) =
             //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
             if belowPredicate c && abovePredicate c then
-                [ (c, ((0, 1): coord), [ Map.find c boardMap ], getPossibleLength c 0u) ]
+                [ (c, ((0, 1): coord), [ Map.find c boardMap ], getVerticalLength c 0u) ]
             else if belowPredicate c && not (abovePredicate c) then
-                [ (c, ((0, 1): coord), getLettersAboveCoord c [ Map.find c boardMap ], getPossibleLength c 0u) ]
+                [ (c, ((0, 1): coord), getLettersAboveCoord c [ Map.find c boardMap ], getVerticalLength c 0u) ]
             else
                 []
-
-        List.fold (fun acc c -> List.append acc (predicateHandler c)) [] keys
+        
+        let rec horizontalPredicateHandler (c: coord) =
+            //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
+            if rightPredicate c && leftPredicate c then
+                [ (c, ((1, 0): coord), [ Map.find c boardMap ], getHorizontalLength c 0u) ]
+            else if rightPredicate c && not (leftPredicate c) then
+                [ (c, ((1, 0): coord), getLettersLeftOfCoord c [ Map.find c boardMap ], getHorizontalLength c 0u) ]
+            else
+                []
+        let verticalStarters = List.fold (fun acc c -> List.append acc (verticalPredicateHandler c)) [] keys
+        let horizontalStarters = List.fold (fun acc c -> List.append acc (horizontalPredicateHandler c)) [] keys
+        verticalStarters @ horizontalStarters
     
     let getPairFromSet (set:Set<char*int>) : char*int = 
         match (Set.toList set) with
@@ -133,7 +163,7 @@ module State =
 
     let getStartPoints (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
         debugPrint (sprintf "\nboardMap %A\n" (boardMap))
-        getVerticalStarters boardMap
+        getAllStarters boardMap
 
     //getReadyDict xs (snd (Dictionary.step (Map.find x pieces) d)) pieces
     let rec getReadyDict (letters:list<uint32>) (dict : option<Dictionary.Dict>) (pieces:Map<uint32, tile>) :ScrabbleUtil.Dictionary.Dict = 
@@ -141,7 +171,7 @@ module State =
         //Case 1: Step into d with bottom of l
         | x :: xs, Some d ->
             let result = (Dictionary.step (fst (getPairFromSet (Map.find x pieces))) d)
-            debugPrint (sprintf "\nresult (Dict): %A\n" result)
+            //debugPrint (sprintf "\nresult (Dict): %A\n" result)
             match result with
             | Some r -> getReadyDict xs (Some (snd r)) pieces
             | None -> failwith "should not happen. PLEASE!!!"
@@ -162,8 +192,8 @@ module State =
     let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
         //TODO: Maybe fix duplicate words
         //TODO: Tag højde for hvor langt et ord kan være fra starteren
-        debugPrint (sprintf "\nstarter: %A\n" starter)
-        debugPrint (sprintf "\nletters: %A\n" letters)
+        //debugPrint (sprintf "\nstarter: %A\n" starter)
+        //debugPrint (sprintf "\nletters: %A\n" letters)
 
         //1. Define helper function that uses recursion to find all continuations
         let rec aux word letters auxDict =
@@ -185,6 +215,13 @@ module State =
             ) [] letters 
         
         aux [] letters dict
+    
+    let removeImpossibleMoves (moveLength:uint32) moves =
+        if List.isEmpty moves 
+        then List.empty
+        else List.filter (fun l -> List.length l <= int moveLength) moves
+
+
 
     //Finds the longest move from a list of moves
     let findLongestMove (moves:list<list<'a>>) : list<'a> = 
@@ -203,6 +240,11 @@ module State =
     let getCoordsFromStarter s : coord * coord = 
         match s with
         | (coord1, coord2, _, _) -> coord1, coord2
+    
+    let getLengthFromStarter s : uint32 = 
+        match s with
+        | (_, _, _, length) -> length
+
     //Gets a list of possible words for a given starter
     let getStarterOptions (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
         //1. Step in to the dictionary with the letters of the starter.
@@ -210,9 +252,9 @@ module State =
         //2. Get letters as list so they can be folded over.
         let letters = MultiSet.toList state.hand
         //3. Get a list of possible continuations of the starter
-        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter
+        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter |> removeImpossibleMoves (getLengthFromStarter starter)
         let longestContinuation = findLongestMove possibleContinuations
-        debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
+        //debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
         
         let starterCoords = getCoordsFromStarter starter
         continuationToMove longestContinuation (fst starterCoords) (snd starterCoords) pieces
