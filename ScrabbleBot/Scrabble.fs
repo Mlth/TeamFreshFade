@@ -125,21 +125,103 @@ module State =
                 []
 
         List.fold (fun acc c -> List.append acc (predicateHandler c)) [] keys
+    
+    let getPairFromSet (set:Set<char*int>) : char*int = 
+        match (Set.toList set) with
+        | x::xs -> x
+        | [] -> failwith "Should not happen!"
 
     let getStartPoints (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
         debugPrint (sprintf "\nboardMap %A\n" (boardMap))
         getVerticalStarters boardMap
 
-    let getStarterOptions (starter:coord * coord * list<uint32> * uint32) (state:state) : list<list<(int * int) * (uint32 * (char * int))>> = failwith "not implmented"
-        //1. Step in to the dictionary with the letters of the starter
+    //getReadyDict xs (snd (Dictionary.step (Map.find x pieces) d)) pieces
+    let rec getReadyDict (letters:list<uint32>) (dict : option<Dictionary.Dict>) (pieces:Map<uint32, tile>) :ScrabbleUtil.Dictionary.Dict = 
+        match letters, dict with
+        //Case 1: Step into d with bottom of l
+        | x :: xs, Some d ->
+            let result = (Dictionary.step (fst (getPairFromSet (Map.find x pieces))) d)
+            debugPrint (sprintf "\nresult (Dict): %A\n" result)
+            match result with
+            | Some r -> getReadyDict xs (Some (snd r)) pieces
+            | None -> failwith "should not happen. PLEASE!!!"
+        //Case 2: No more letters, return dictionary-level.
+        | [], Some d -> d
+        | _, None -> failwith "should not happen. PLEASE!!!"
+    
+    let getLettersFromStarter s = 
+        match s with
+        | (_, _, letters, _) -> letters
 
-        //2. Try to step further and construct a word with the letters contained in our hand
-    
-    let findLongestMove (moves:list<list<(int * int) * (uint32 * (char * int))>>) : list<(int * int) * (uint32 * (char * int))> = 
-        List.maxBy (fun move -> move.Length) moves
-    
-    let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) : list<(int * int) * (uint32 * (char * int))> = 
-        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> List.append (getStarterOptions starter state) acc) [] starters
+    let removeLetter letter letters = 
+        let index = List.tryFindIndex (fun x -> x = letter) letters
+        match index with
+        | Some(i) -> List.removeAt i letters
+        | None -> letters
+
+    let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
+        //TODO: Maybe fix duplicate words
+        //TODO: Tag højde for hvor langt et ord kan være fra starteren
+        debugPrint (sprintf "\nstarter: %A\n" starter)
+        debugPrint (sprintf "\nletters: %A\n" letters)
+
+        //1. Define helper function that uses recursion to find all continuations
+        let rec aux word letters auxDict =
+        //2. Fold over all letters available
+            List.fold (fun acc letter ->
+                //3. Use step function to check if a word can be made with the given letter
+                let result = Dictionary.step (fst (getPairFromSet (Map.find letter pieces))) auxDict
+                match result with
+                //3.1 If a word is found, append the the new word to the accumulator and continue the search with the new word. 
+                | Some r when (fst r) -> 
+                    let newWord = List.append word [letter]
+                    (newWord::acc) @ (aux newWord (removeLetter letter letters) (snd r))
+                //3.2 If a word is not found, but the letter is legal, continue the search with the new word.
+                | Some r when not (fst r) ->
+                    let newWord = List.append word [letter]
+                    acc @ (aux newWord (removeLetter letter letters) (snd r))
+                //3.3 If letter is illegal, return empty list.
+                | None -> acc
+            ) [] letters 
+        
+        aux [] letters dict
+
+    //Finds the longest move from a list of moves
+    let findLongestMove (moves:list<list<'a>>) : list<'a> = 
+        if List.isEmpty moves 
+        then List.empty
+        else List.maxBy (fun move -> move.Length) moves
+
+    let continuationToMove (continuation:list<uint32>) (startCoord:coord) (direction:coord) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> = 
+        List.fold (fun acc letter -> (
+            let tile = Map.find letter pieces
+            if fst direction = 1 
+            then List.append acc [(((fst startCoord) + acc.Length + 1, snd startCoord), (letter, (getPairFromSet tile)))]
+            else List.append acc [((fst startCoord, (snd startCoord) + acc.Length + 1), (letter, (getPairFromSet tile)))]
+        )) [] continuation
+        
+    let getCoordsFromStarter s : coord * coord = 
+        match s with
+        | (coord1, coord2, _, _) -> coord1, coord2
+    //Gets a list of possible words for a given starter
+    let getStarterOptions (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
+        //1. Step in to the dictionary with the letters of the starter.
+        let readyDict = getReadyDict (getLettersFromStarter starter) (Some state.dict) pieces
+        //2. Get letters as list so they can be folded over.
+        let letters = MultiSet.toList state.hand
+        //3. Get a list of possible continuations of the starter
+        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter
+        let longestContinuation = findLongestMove possibleContinuations
+        debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
+        
+        let starterCoords = getCoordsFromStarter starter
+        continuationToMove longestContinuation (fst starterCoords) (snd starterCoords) pieces
+        
+    //Finds all possible moves and returns longest one
+    let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
+        //1. Folds over all starters and returns all possible moves. 
+        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> (getStarterOptions starter state pieces)::acc) [] starters
+        //2. Finds the longest AKA the best move
         findLongestMove allMoves
     
     let board st = st.board
@@ -173,17 +255,21 @@ module Scrabble =
                 //If board is empty, bruteforce word using tiles on hand and coords for placemement.
 
                 //else
+                //Get possible starting points for words
                 let startingPoints = State.getStartPoints st.customBoard
-                if itIsMyTurn then
-                    debugPrint (sprintf "Player %d: \nStartingpoints: %A \n" st.playerNumber (startingPoints))
-                // remove the force print when you move on from manual input (or when you have learnt the format)
-                let input = System.Console.ReadLine()
-                let move = RegEx.parseMove input
-                if itIsMyTurn then
-                    debugPrint (
-                        sprintf "Player %d: Player %d -> Server:\n%A\n" st.playerNumber (State.playerNumber st) move
-                    ) // keep the debug lines. They are useful.
-                send cstream (SMPlay move)
+                if startingPoints.IsEmpty 
+                then 
+                    debugPrint "startingpoints empty"
+                    // remove the force print when you move on from manual input (or when you have learnt the format)
+                    let input = System.Console.ReadLine()
+                    let move = RegEx.parseMove input
+                    send cstream (SMPlay move)
+                else
+                    //Get the best move as a list<(int * int) * (uint32 * (char * int))
+                    let move = State.getMove startingPoints st pieces
+                    debugPrint (sprintf "\nprinting move: %A\n" move)
+                    debugPrint (sprintf "Player %d: Player %d -> Server:\n%A\n" st.playerNumber (State.playerNumber st) move) // keep the debug lines. They are useful.
+                    send cstream (SMPlay move)
 
             let msg: Response = recv cstream
 
