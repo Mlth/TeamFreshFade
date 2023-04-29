@@ -202,7 +202,6 @@ module Scrabble =
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
                 //UPDATE BOARD
                 let updatedCustomBoard = State.updateCustomBoard ms st.customBoard
-                //GET STARTING POINTS
 
                 let st' =
                     State.mkState
@@ -213,8 +212,6 @@ module Scrabble =
                         st.playerNumber
                         (st.PlayerTurn + 1u)
                         handAfterAdd
-
-                //debugPrint "\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n"
 
                 aux st'
             | RCM(CMPlayed(pid, ms, points)) ->
