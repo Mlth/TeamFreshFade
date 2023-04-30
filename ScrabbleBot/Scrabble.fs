@@ -246,7 +246,7 @@ module State =
         | (_, _, _, length) -> length
 
     //Gets a list of possible words for a given starter
-    let getStarterOptions (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
+    let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
         //1. Step in to the dictionary with the letters of the starter.
         let readyDict = getReadyDict (getLettersFromStarter starter) (Some state.dict) pieces
         //2. Get letters as list so they can be folded over.
@@ -262,9 +262,13 @@ module State =
     //Finds all possible moves and returns longest one
     let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
         //1. Folds over all starters and returns all possible moves. 
-        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> (getStarterOptions starter state pieces)::acc) [] starters
+        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> (getLongestStarterOption starter state pieces)::acc) [] starters
         //2. Finds the longest AKA the best move
         findLongestMove allMoves
+    
+    let getFirstMove (state:state) (pieces:Map<uint32, tile>) =
+        let starter:coord * coord * list<uint32> * uint32 = ((-1, 0), (1, 0), [], 7u)
+        getLongestStarterOption starter state pieces
     
     let board st = st.board
     let customBoard st = st.customBoard
@@ -291,32 +295,25 @@ module Scrabble =
 
             if itIsMyTurn then
                 State.printStatus st
-                forcePrint
-                    $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
-                Print.printHand pieces (State.hand st)
-                //If board is empty, bruteforce word using tiles on hand and coords for placemement.
+                //forcePrint $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
+                //Print.printHand pieces (State.hand st)
 
-                //else
-                //Get possible starting points for words
-                let startingPoints = State.getStartPoints st.customBoard
-                if startingPoints.IsEmpty 
+                if st.customBoard.IsEmpty
                 then 
-                    debugPrint "startingpoints empty"
-                    // remove the force print when you move on from manual input (or when you have learnt the format)
-                    let input = System.Console.ReadLine()
-                    let move = RegEx.parseMove input
+                    //Get the best word for first move and play it
+                    let move = State.getFirstMove st pieces
                     send cstream (SMPlay move)
                 else
+                    //Get possible starting points for words. If there are none
+                    let startingPoints = State.getStartPoints st.customBoard
                     //Get the best move as a list<(int * int) * (uint32 * (char * int))
                     let move = State.getMove startingPoints st pieces
-                    debugPrint (sprintf "\nprinting move: %A\n" move)
                     debugPrint (sprintf "Player %d: Player %d -> Server:\n%A\n" st.playerNumber (State.playerNumber st) move) // keep the debug lines. They are useful.
                     send cstream (SMPlay move)
 
             let msg: Response = recv cstream
 
-            if not itIsMyTurn then
-                debugPrint (sprintf "Player %d: Player %d <- Server:\n" st.playerNumber (State.playerNumber st)) // keep the debug lines. They are useful.
+            if not itIsMyTurn then debugPrint (sprintf "Player %d: Player %d <- Server:\n" st.playerNumber (State.playerNumber st)) // keep the debug lines. They are useful.
 
             match msg with
             | RCM(CMPlaySuccess(ms, points, newPieces)) ->
