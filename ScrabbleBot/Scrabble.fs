@@ -295,6 +295,7 @@ module Scrabble =
                 //forcePrint $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
                 //Print.printHand pieces (State.hand st)
 
+                //If customBoard is empty, no move has been played
                 if st.customBoard.IsEmpty
                 then 
                     //Get the best word for first move and play it
@@ -316,15 +317,13 @@ module Scrabble =
             | RCM(CMPlaySuccess(ms, points, newPieces)) ->
                 // debugPrint (sprintf "\nnewPieces %A\n" (newPieces))
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
-                //UPDATE HAND
-                let piecesToBeRemoved: MultiSet<uint32> =
-                    List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) empty ms
-
+                //Update hand
+                let piecesToBeRemoved: MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) empty ms
                 let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
-                //UPDATE BOARD
+                //Update board
                 let updatedCustomBoard = State.updateCustomBoard ms st.customBoard
-
+                //Make new state
                 let st' =
                     State.mkState
                         st.board
@@ -334,23 +333,21 @@ module Scrabble =
                         st.playerNumber
                         (st.PlayerTurn + 1u)
                         handAfterAdd
-
                 aux st'
             | RCM(CMPlayed(pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
-                //UPDATE BOARD
-                let updatedStinkyBoard = State.updateCustomBoard ms st.customBoard
-
+                //Update board
+                let updateCustomBoard = State.updateCustomBoard ms st.customBoard
+                //Make new state
                 let st' =
                     State.mkState
                         st.board
-                        updatedStinkyBoard
+                        updateCustomBoard
                         st.dict
                         st.numberOfPlayers
                         st.playerNumber
                         (st.PlayerTurn + 1u)
                         st.hand
-
                 aux st'
             | RCM(CMPlayFailed(pid, ms)) ->
                 (* Failed play. Update your state *)
