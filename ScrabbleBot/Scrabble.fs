@@ -189,14 +189,6 @@ module State =
         | Some(i) -> List.removeAt i letters
         | None -> letters
 
-    let getCoordsFromStarter s : coord * coord = 
-        match s with
-        | (coord1, coord2, _, _) -> coord1, coord2
-    
-    let getLengthFromStarter s : uint32 = 
-        match s with
-        | (_, _, _, length) -> length
-
     let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
         //TODO: Maybe fix duplicate words
         //TODO: Tag højde for hvor langt et ord kan være fra starteren
@@ -258,7 +250,9 @@ module State =
         let longestContinuation = findLongestMove possibleContinuations
         //debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
         
-        let starterCoords = getCoordsFromStarter starter
+        //Get startCoord and direction for starter and use that to make an actual move
+        let startCoord, direction, _, _ = starter
+        let starterCoords = (startCoord, direction)
         continuationToMove longestContinuation (fst starterCoords) (snd starterCoords) pieces
         
     //Finds all possible moves and returns longest one
@@ -267,7 +261,8 @@ module State =
         let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> (getLongestStarterOption starter state pieces)::acc) [] starters
         //2. Finds the longest AKA the best move
         findLongestMove allMoves
-    
+
+    //Makes a starter that that starts in (-1, 0), moves to the right, has no previous letters, and has max-length of 7. Then gets longest option for that starter.  
     let getFirstMove (state:state) (pieces:Map<uint32, tile>) =
         let starter:coord * coord * list<uint32> * uint32 = ((-1, 0), (1, 0), [], 7u)
         getLongestStarterOption starter state pieces
