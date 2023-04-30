@@ -191,7 +191,7 @@ module State =
 
     let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
         //TODO: Maybe fix duplicate words
-        //TODO: Tag højde for hvor langt et ord kan være fra starteren
+        //TODO: Handle wildcard
 
         let _, _, _, possibleLength = starter
 
