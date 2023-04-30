@@ -189,15 +189,25 @@ module State =
         | Some(i) -> List.removeAt i letters
         | None -> letters
 
+    let getCoordsFromStarter s : coord * coord = 
+        match s with
+        | (coord1, coord2, _, _) -> coord1, coord2
+    
+    let getLengthFromStarter s : uint32 = 
+        match s with
+        | (_, _, _, length) -> length
+
     let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
         //TODO: Maybe fix duplicate words
         //TODO: Tag højde for hvor langt et ord kan være fra starteren
-        //debugPrint (sprintf "\nstarter: %A\n" starter)
-        //debugPrint (sprintf "\nletters: %A\n" letters)
+
+        let _, _, _, possibleLength = starter
 
         //1. Define helper function that uses recursion to find all continuations
-        let rec aux word letters auxDict =
-        //2. Fold over all letters available
+        let rec aux (word:list<uint32>) letters auxDict =
+            //Make sure that the length of the current word is not longer than the possible length from the starter
+            if ((uint32) word.Length) >= possibleLength then [] else
+            //2. Fold over all letters available
             List.fold (fun acc letter ->
                 //3. Use step function to check if a word can be made with the given letter
                 let result = Dictionary.step (fst (getPairFromSet (Map.find letter pieces))) auxDict
@@ -216,12 +226,11 @@ module State =
         
         aux [] letters dict
     
+    //Remove moves that are longer than what is allowed by the starter
     let removeImpossibleMoves (moveLength:uint32) moves =
         if List.isEmpty moves 
         then List.empty
         else List.filter (fun l -> List.length l <= int moveLength) moves
-
-
 
     //Finds the longest move from a list of moves
     let findLongestMove (moves:list<list<'a>>) : list<'a> = 
@@ -229,6 +238,7 @@ module State =
         then List.empty
         else List.maxBy (fun move -> move.Length) moves
 
+    //Converts a continuation of the form list<uint32> (which is a list of the id's of a continuation) to a move.
     let continuationToMove (continuation:list<uint32>) (startCoord:coord) (direction:coord) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> = 
         List.fold (fun acc letter -> (
             let tile = Map.find letter pieces
@@ -236,14 +246,6 @@ module State =
             then List.append acc [(((fst startCoord) + acc.Length + 1, snd startCoord), (letter, (getPairFromSet tile)))]
             else List.append acc [((fst startCoord, (snd startCoord) + acc.Length + 1), (letter, (getPairFromSet tile)))]
         )) [] continuation
-        
-    let getCoordsFromStarter s : coord * coord = 
-        match s with
-        | (coord1, coord2, _, _) -> coord1, coord2
-    
-    let getLengthFromStarter s : uint32 = 
-        match s with
-        | (_, _, _, length) -> length
 
     //Gets a list of possible words for a given starter
     let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
@@ -252,7 +254,7 @@ module State =
         //2. Get letters as list so they can be folded over.
         let letters = MultiSet.toList state.hand
         //3. Get a list of possible continuations of the starter
-        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter |> removeImpossibleMoves (getLengthFromStarter starter)
+        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter //|> removeImpossibleMoves (getLengthFromStarter starter)
         let longestContinuation = findLongestMove possibleContinuations
         //debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
         
