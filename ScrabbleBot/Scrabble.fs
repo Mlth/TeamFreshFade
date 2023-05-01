@@ -50,16 +50,18 @@ module State =
           numberOfPlayers: uint32
           playerNumber: uint32
           PlayerTurn: uint32
-          hand: MultiSet.MultiSet<uint32> }
+          hand: MultiSet.MultiSet<uint32>
+          canChange: bool }
 
-    let mkState b sb d np pn pt h =
+    let mkState b sb d np pn pt h tl =
         { board = b
           customBoard = sb
           dict = d
           numberOfPlayers = np
           playerNumber = pn
           PlayerTurn = pt
-          hand = h }
+          hand = h
+          canChange = tl }
 
     let addToHand (hand: MultiSet<uint32>) (newPieces: list<uint32 * uint32>) : MultiSet<uint32> =
         List.fold (fun acc (x, k) -> add x k acc) hand newPieces
@@ -162,7 +164,6 @@ module State =
         | [] -> failwith "Should not happen!"
 
     let getStartPoints (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
-        debugPrint (sprintf "\nboardMap %A\n" (boardMap))
         getAllStarters boardMap
 
     //getReadyDict xs (snd (Dictionary.step (Map.find x pieces) d)) pieces
@@ -276,11 +277,12 @@ module State =
     let printStatus st : unit =
         debugPrint (
             sprintf
-                "\nTotal players: %d | Our number: %d | total turns: %d | current player turn: %d \n"
+                "\nTotal players: %d | Our number: %d | total turns: %d | current player turn: %d | Enough tiles: %b \n"
                 st.numberOfPlayers
-                st.playerNumber
+                (st.playerNumber + 1u)
                 st.PlayerTurn
-                (st.PlayerTurn % st.numberOfPlayers)
+                ((st.PlayerTurn % st.numberOfPlayers) + 1u)
+                st.canChange
         )
 
 module Scrabble =
@@ -288,30 +290,45 @@ module Scrabble =
 
     let playGame cstream pieces (st: State.state) =
         let rec aux (st: State.state) =
+            let totalTilesLeft = 100u
             let itIsMyTurn = st.playerNumber = (st.PlayerTurn % st.numberOfPlayers)
-
             if itIsMyTurn then
                 State.printStatus st
                 //forcePrint $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
-                //Print.printHand pieces (State.hand st)
+                Print.printHand pieces (State.hand st)
 
                 //If customBoard is empty, no move has been played
                 if st.customBoard.IsEmpty
                 then 
                     //Get the best word for first move and play it
                     let move = State.getFirstMove st pieces
-                    send cstream (SMPlay move)
+                    if move.IsEmpty || move.Length < 3 
+                    then
+                        debugPrint (sprintf "Player %d: Trying to change tiles in hand\n" st.playerNumber) // keep the debug lines. They are useful.
+                        if st.canChange 
+                        then send cstream (SMChange (toList st.hand))
+                        else send cstream (SMPass)
+                    else
+                        debugPrint (sprintf "Player %d -> Server:\n%A\n" st.playerNumber move) // keep the debug lines. They are useful.
+                        send cstream (SMPlay move)
                 else
                     //Get possible starting points for words. If there are none
                     let startingPoints = State.getStartPoints st.customBoard
                     //Get the best move as a list<(int * int) * (uint32 * (char * int))
                     let move = State.getMove startingPoints st pieces
-                    debugPrint (sprintf "Player %d: Player %d -> Server:\n%A\n" st.playerNumber (State.playerNumber st) move) // keep the debug lines. They are useful.
-                    send cstream (SMPlay move)
+                    if move.IsEmpty 
+                    then 
+                        debugPrint (sprintf "Player %d -> Server: Trying to change tiles in hand\n" st.playerNumber ) // keep the debug lines. They are useful.
+                        if st.canChange
+                        then send cstream (SMChange (toList st.hand))
+                        else send cstream (SMPass)
+                    else
+                        debugPrint (sprintf "Player %d -> Server:\n%A\n" st.playerNumber move) // keep the debug lines. They are useful.
+                        send cstream (SMPlay move)
 
             let msg: Response = recv cstream
 
-            if not itIsMyTurn then debugPrint (sprintf "Player %d: Player %d <- Server:\n" st.playerNumber (State.playerNumber st)) // keep the debug lines. They are useful.
+            if not itIsMyTurn then debugPrint (sprintf "Player %d: <- Server:\n" st.playerNumber ) // keep the debug lines. They are useful.
 
             match msg with
             | RCM(CMPlaySuccess(ms, points, newPieces)) ->
@@ -333,6 +350,7 @@ module Scrabble =
                         st.playerNumber
                         (st.PlayerTurn + 1u)
                         handAfterAdd
+                        st.canChange
                 aux st'
             | RCM(CMPlayed(pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
@@ -348,6 +366,7 @@ module Scrabble =
                         st.playerNumber
                         (st.PlayerTurn + 1u)
                         st.hand
+                        st.canChange
                 aux st'
             | RCM(CMPlayFailed(pid, ms)) ->
                 (* Failed play. Update your state *)
@@ -360,14 +379,79 @@ module Scrabble =
                         st.playerNumber
                         (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                         st.hand
+                        st.canChange
                 // This state needs to be updated
                 aux st'
             | RCM(CMGameOver _) -> ()
+            | RCM(CMChange(pid, numberOfTiles)) ->
+                let st' =
+                    State.mkState
+                        st.board
+                        st.customBoard
+                        st.dict
+                        st.numberOfPlayers
+                        st.playerNumber
+                        (st.PlayerTurn + 1u) // Remember that when reading the value we have to
+                        st.hand
+                        st.canChange
+                // This state needs to be updated
+                aux st'
+            | RCM(CMChangeSuccess(newTiles)) -> 
+                let emptyHand:MultiSet<uint32> = MultiSet.empty 
+                let handAfterAdd = State.addToHand emptyHand newTiles
+
+                let st' =
+                    State.mkState
+                        st.board
+                        st.customBoard
+                        st.dict
+                        st.numberOfPlayers
+                        st.playerNumber
+                        (st.PlayerTurn + 1u) // Remember that when reading the value we have to
+                        handAfterAdd
+                        st.canChange
+                // This state needs to be updated
+                aux st'
+            | RCM(CMPassed pid) -> 
+                let st' =
+                    State.mkState
+                        st.board
+                        st.customBoard
+                        st.dict
+                        st.numberOfPlayers
+                        st.playerNumber
+                        (st.PlayerTurn + 1u) // Remember that when reading the value we have to
+                        st.hand
+                        st.canChange
+                // This state needs to be updated
+                aux st'
             | RCM a -> failwith (sprintf "not implmented: %A" a)
             | RGPE err ->
-                debugPrint (sprintf "Gameplay Error:\n%A" err)
-                aux st
-
+                let numberOfGEPNEP = 
+                    List.fold (fun acc error -> 
+                        match error with
+                        | GPENotEnoughPieces(changeTiles, availableTiles) -> 
+                            acc + 1
+                        | err -> 
+                            debugPrint (sprintf "Gameplay Error:\n%A" err)
+                            acc
+                    ) 0 err
+                if numberOfGEPNEP > 0
+                then 
+                    let st' =
+                        State.mkState
+                            st.board
+                            st.customBoard
+                            st.dict
+                            st.numberOfPlayers
+                            st.playerNumber
+                            (st.PlayerTurn + 1u) // Remember that when reading the value we have to
+                            st.hand
+                            false
+                    aux st'
+                else
+                    aux st
+        
         aux st
 
     let startGame
@@ -406,4 +490,4 @@ module Scrabble =
             playGame
                 cstream
                 tiles
-                (State.mkState board Map.empty dict numPlayers (playerNumber - 1u) (playerTurn - 1u) handSet)
+                (State.mkState board Map.empty dict numPlayers (playerNumber - 1u) (playerTurn - 1u) handSet true)
