@@ -8,6 +8,8 @@ open System.IO
 open ScrabbleUtil.DebugPrint
 open MultiSet
 
+
+
 // The RegEx module is only used to parse human input. It is not used for the final product.
 
 module RegEx =
@@ -38,6 +40,8 @@ module Print =
         |> MultiSet.fold (fun _ x i -> debugPrint (sprintf "\n%d -> (%A, %d)\n" x (Map.find x pieces) i)) ()
 
 module State =
+
+    
     // Make sure to keep your state localised in this module. It makes your life a whole lot easier.
     // Currently, it only keeps track of your hand, your player numer, your board, and your dictionary,
     // but it could, potentially, keep track of other useful
@@ -335,7 +339,7 @@ module Scrabble =
                 // debugPrint (sprintf "\nnewPieces %A\n" (newPieces))
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
                 //Update hand
-                let piecesToBeRemoved: MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) empty ms
+                let piecesToBeRemoved: MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) MultiSet.empty ms
                 let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
                 //Update board

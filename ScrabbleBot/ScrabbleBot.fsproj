@@ -1,10 +1,10 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net7.0</TargetFramework>
-    </PropertyGroup>
-
+  </PropertyGroup>
   <ItemGroup>
+    <Compile Include="Trie.fsi" />
+    <Compile Include="Trie.fs" />
     <Compile Include="MultiSet.fsi" />
     <Compile Include="MultiSet.fs" />
     <Compile Include="FParsecLight.fsi" />
@@ -17,16 +17,13 @@
     <Compile Include="Scrabble.fsi" />
     <Compile Include="Scrabble.fs" />
   </ItemGroup>
-
   <ItemGroup>
     <PackageReference Include="FParsec" Version="1.1.1" />
     <PackageReference Update="FSharp.Core" Version="7.0.200" />
   </ItemGroup>
-
   <ItemGroup>
     <Reference Include="ScrabbleUtil, Culture=neutral, PublicKeyToken=null">
       <HintPath>..\dlls\ScrabbleUtil.dll</HintPath>
     </Reference>
   </ItemGroup>
-
 </Project>
