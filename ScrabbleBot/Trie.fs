@@ -8,15 +8,15 @@ module Dictionary
 
     let rec insert (s: string) (dict: Dict) : Dict =
 
-        let reverseString = ">" + new string(s.ToCharArray() |> Array.rev)
+        let reverseString = ">" + (new string(s.ToCharArray() |> Array.rev))
 
-        let rec aux s dict: Dict =
+        let rec aux s (dict:Dict): Dict =
             match s with
-            | "" -> TrieNode (true, Map.empty) // If the string is empty, create a new TrieNode that represents the end of a word
+            | "" -> match dict with TrieNode(_, d) -> TrieNode(true, d) // If the string is empty, create a new TrieNode that represents the end of a word
             | str ->
                 let head = str.[0]
                 let tail = str.[1..]
-                let (isEnd, children) = match dict with TrieNode(isEnd, children) -> (isEnd, children)
+                let (isEnd, children) = match dict with TrieNode(b, c) -> (b, c)
                 let child =
                     match Map.tryFind head children with // Check if the current character already exists in the lookup table
                     | Some t -> t
@@ -39,7 +39,7 @@ module Dictionary
             | None -> false // If it doesn't, the string is not in the dictionary
 
     let step (c: char) (dict: Dict) =
-        let (isEnd, children) = match dict with | TrieNode(isEnd, children) -> (isEnd, children)
+        let children = match dict with | TrieNode(_, d) -> d
         match (Map.tryFind c children) with // Check if the current character exists in the lookup table
-        | Some (TrieNode(isEnd, children)) -> Some(isEnd, TrieNode(isEnd, children))
+        | Some (TrieNode(b, di)) -> Some(b, TrieNode(b, di))
         | None -> None // If it doesn't, return None    
