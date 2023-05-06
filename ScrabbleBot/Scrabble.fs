@@ -131,6 +131,14 @@ module State =
                 getLettersAboveCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
             else
                 acc
+
+        let rec getLettersBelowCoord (c: coord) (acc: (uint32) list) : (uint32) list =
+            let coordToInvestigate: coord = (fst c, snd c + 1)
+
+            if List.contains (coordToInvestigate: coord) keys then
+                getLettersBelowCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
+            else
+                acc
         
         let rec getLettersLeftOfCoord (c: coord) (acc: (uint32) list) : (uint32) list =
             let coordToInvestigate: coord = (fst c-1, snd c)
@@ -139,6 +147,14 @@ module State =
                 getLettersLeftOfCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
             else
                 acc
+
+        let rec getLettersRightOfCoord (c: coord) (acc: (uint32) list) : (uint32) list =
+            let coordToInvestigate: coord = (fst c + 1, snd c)
+
+            if List.contains (coordToInvestigate: coord) keys then
+                getLettersRightOfCoord coordToInvestigate ((Map.find coordToInvestigate boardMap) :: acc)
+            else
+                acc        
 
         let rec getVerticalLength (c: coord) (acc: uint32) : uint32 =
             let coordToInvestigate: coord = (fst c, snd c + 1)
@@ -153,6 +169,23 @@ module State =
                     && acc < 7u
                 then
                     getVerticalLength coordToInvestigate (acc + 1u)
+                else
+                    acc
+        
+        let rec getRevVerticalLength (c: coord) (acc: uint32) : uint32 =
+            let coordToInvestigate: coord = (fst c, snd c - 1)
+
+            if
+                not (abovePredicate c)
+            then
+                getRevVerticalLength coordToInvestigate acc
+            else
+                if
+                    leftPredicate coordToInvestigate
+                    && rightPredicate coordToInvestigate
+                    && acc < 7u
+                then
+                    getRevVerticalLength coordToInvestigate (acc + 1u)
                 else
                     acc
         
@@ -172,12 +205,37 @@ module State =
                 else
                     acc
         
+        let rec getRevHorizontalLength (c: coord) (acc: uint32) : uint32 =
+            let coordToInvestigate: coord = (fst c - 1, snd c)
+            if
+                not (leftPredicate c)
+            then
+                getRevHorizontalLength coordToInvestigate acc
+            else
+                if
+                    abovePredicate coordToInvestigate
+                    && belowPredicate coordToInvestigate
+                    && acc < 7u
+                then
+                    getRevHorizontalLength coordToInvestigate (acc + 1u)
+                else
+                    acc
+        
         let rec verticalPredicateHandler (c: coord) =
             //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
             if belowPredicate c && abovePredicate c then
                 [ (c, ((0, 1): coord), [ Map.find c boardMap ], getVerticalLength c 0u) ]
             else if belowPredicate c && not (abovePredicate c) then
                 [ (c, ((0, 1): coord), getLettersAboveCoord c [ Map.find c boardMap ], getVerticalLength c 0u) ]
+            else
+                []
+        
+        let rec reverseVerticalPredicateHandler (c: coord) =
+            //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
+            if belowPredicate c && abovePredicate c then
+                [ (c, ((0, -1): coord), [ Map.find c boardMap ], getRevVerticalLength c 0u) ]
+            else if belowPredicate c && not (abovePredicate c) then
+                [ (c, ((0, -1): coord), getLettersBelowCoord c [ Map.find c boardMap ], getRevVerticalLength c 0u) ]
             else
                 []
         
@@ -189,9 +247,24 @@ module State =
                 [ (c, ((1, 0): coord), getLettersLeftOfCoord c [ Map.find c boardMap ], getHorizontalLength c 0u) ]
             else
                 []
+        
+        let rec reverseHorizontalPredicateHandler (c: coord) =
+            //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
+            if rightPredicate c && leftPredicate c then
+                [ (c, ((-1, 0): coord), [ Map.find c boardMap ], getRevHorizontalLength c 0u) ]
+            else if rightPredicate c && not (leftPredicate c) then
+                [ (c, ((-1, 0): coord), getLettersRightOfCoord c [ Map.find c boardMap ], getRevHorizontalLength c 0u) ]
+            else
+                []
+        
         let verticalStarters = List.fold (fun acc c -> List.append acc (verticalPredicateHandler c)) [] keys
         let horizontalStarters = List.fold (fun acc c -> List.append acc (horizontalPredicateHandler c)) [] keys
-        verticalStarters @ horizontalStarters
+        let reverseVerticalStarters = List.fold (fun acc c -> List.append acc (reverseVerticalPredicateHandler c)) [] keys
+        let reverseHorizontalStarters = List.fold (fun acc c -> List.append acc (reverseHorizontalPredicateHandler c)) [] keys
+        verticalStarters @ horizontalStarters @ reverseVerticalStarters @ reverseHorizontalStarters
+    
+    // let dict = empty () |> insert "BE" |> insert "BETIDED"
+    // lookup "BETIDED" dict
 
     let getStartPoints (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
         getAllStarters boardMap
@@ -235,7 +308,14 @@ module State =
         else
             if diry = 1
             then (coordx, coordy + 1)
-            else (coordx, coordy)
+            else 
+                if dirx = -1
+                then (coordx - 1, coordy)
+                else
+                    if diry = -1
+                    then (coordx, coordy - 1)
+                    else
+                        (coordx, coordy)
 
     let getPairFromTile (set:tile) : char*int = 
         match (Set.toList set) with
@@ -245,7 +325,6 @@ module State =
     //Should be named findPossibleMoves
     let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<(int * int) * (uint32 * (char * int))>> =
         //TODO: Maybe fix duplicate words
-        //TODO: Handle wildcard
 
         let _, _, _, possibleLength = starter
         let tilesFromLetters = List.map (fun id -> (id, Map.find id pieces)) letters
@@ -307,10 +386,17 @@ module State =
 
     //Gets a list of possible words for a given starter
     let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
-        //1. Step in to the dictionary with the letters of the starter.
-        let readyDict = getReadyDict (getLettersFromStarter starter) (Some state.dict) pieces
         //2. Get letters as list so they can be folded over.
         let letters = MultiSet.toList state.hand
+        let aux starter =
+            match starter with
+            |_, (x, y), _, _ when x < 0 or y < 0 -> 
+                match (Dictionary.step '>' state.dict) with 
+                | Some(false, dict) -> dict 
+                | _ -> failwith "should never happen"
+            | _ -> state.dict 
+        //1. Step in to the dictionary with the letters of the starter.
+        let readyDict = getReadyDict (getLettersFromStarter starter) (Some (aux starter)) pieces
         //3. Get a list of possible continuations of the starter
         let possibleMoves = findPossibleContinuations state readyDict letters pieces starter
         findLongestMove possibleMoves
@@ -354,6 +440,7 @@ module Scrabble =
             if itIsMyTurn then
                 State.printStatus st
                 //forcePrint $"Player {st.playerNumber}: Input move (format '(<x-coordinate> <y-coordinate> <piece id><character><point-value> )*', note the absence of space between the last inputs)\n"
+                debugPrint (sprintf "Player %d has hand: \n" st.playerNumber)
                 Print.printHand pieces (State.hand st)
 
                 //If customBoard is empty, no move has been played
