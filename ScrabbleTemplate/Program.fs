@@ -52,11 +52,11 @@ let main argv =
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
 
-    let players =
+    (*let players =
         [ ("FreshFade1", dictionary, FreshFade.Scrabble.startGame)
-          ("Oxyphenbutazone", dictionary, Oxyphenbutazone.Scrabble.startGame)]
+          ("Oxyphenbutazone", dictionary, Oxyphenbutazone.Scrabble.startGame)]*)
 
-    //let players = spawnMultiples "FreshFade" dictionary FreshFade.Scrabble.startGame 4
+    let players = spawnMultiples "FreshFade" dictionary FreshFade.Scrabble.startGame 3
 
     do ScrabbleServer.Comm.startGame board dictionary handSize timeout tiles seed port players
 
