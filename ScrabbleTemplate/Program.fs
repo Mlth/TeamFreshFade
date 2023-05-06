@@ -18,7 +18,7 @@ let spawnMultiples name dict bot =
 
 [<EntryPoint>]
 let main argv =
-    ScrabbleUtil.DebugPrint.toggleDebugPrint true // Change to false to supress debug output
+    ScrabbleUtil.DebugPrint.toggleDebugPrint false // Change to false to supress debug output
 
     System.Console.BackgroundColor <- System.ConsoleColor.White
     System.Console.ForegroundColor <- System.ConsoleColor.Black
@@ -52,12 +52,11 @@ let main argv =
     let (dictionary, time) =
         time (fun () -> ScrabbleUtil.Dictionary.mkDict words dictAPI)
 
-    (* let players =
+    let players =
         [ ("FreshFade1", dictionary, FreshFade.Scrabble.startGame)
-          ("FreshFade2", dictionary, FreshFade.Scrabble.startGame)
-          ("FreshFade2", dictionary, FreshFade.Scrabble.startGame) ]
- *)
-    let players = spawnMultiples "FreshFade" dictionary FreshFade.Scrabble.startGame 2
+          ("Oxyphenbutazone", dictionary, Oxyphenbutazone.Scrabble.startGame)]
+
+    //let players = spawnMultiples "FreshFade" dictionary FreshFade.Scrabble.startGame 2
 
     do ScrabbleServer.Comm.startGame board dictionary handSize timeout tiles seed port players
 
