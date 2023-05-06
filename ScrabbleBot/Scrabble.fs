@@ -67,14 +67,38 @@ module State =
           hand = h
           canChange = tl }
 
+    let getPairFromSet (set:Set<char*int>) : char*int = 
+        match (Set.toList set) with
+        | x::xs -> x
+        | [] -> debugPrint "WTF"; failwith "Should not happen!"
+
     let addToHand (hand: MultiSet<uint32>) (newPieces: list<uint32 * uint32>) : MultiSet<uint32> =
         List.fold (fun acc (x, k) -> add x k acc) hand newPieces
 
     let removeFromHand (hand: MultiSet<uint32>) (piecesToBeRemoved: MultiSet<uint32>) : MultiSet<uint32> =
         subtract hand piecesToBeRemoved
 
-    let updateCustomBoard ms boardMap =
-        List.fold (fun acc (coord, (id, (_, _))) -> Map.add coord id acc) boardMap ms
+    let updateCustomBoard ms boardMap pieces = 
+        let newMs = 
+            List.map 
+                (fun msElem -> 
+                    let coord = fst msElem
+                    let id = fst (snd msElem)
+                    let charVal = fst (snd (snd msElem))
+                    let points = snd (snd (snd msElem))
+                    if id = 0u
+                    then 
+                        List.fold 
+                            (fun acc key -> 
+                                let result = Map.tryFind key pieces 
+                                match result with
+                                | Some r -> if fst (getPairFromSet r) = charVal then (coord, (key, (charVal, points))) else acc
+                                | None -> acc
+                            ) msElem (pieces.Keys |> Seq.cast |> Seq.toList)
+                    else
+                        msElem
+                ) ms
+        List.fold (fun acc (coord, (id, (_, _))) -> Map.add coord id acc) boardMap newMs
 
     //Takes the boardMap, finds all vertical starters, and returns them as a list of truples: (coord:StartingPointOfStarter, coord:Direction, list<uint32>:ListOfTilesBeforeStarter)
     let getAllStarters (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
@@ -118,28 +142,35 @@ module State =
 
         let rec getVerticalLength (c: coord) (acc: uint32) : uint32 =
             let coordToInvestigate: coord = (fst c, snd c + 1)
-
             if
-                belowPredicate coordToInvestigate
-                && leftPredicate coordToInvestigate
-                && rightPredicate coordToInvestigate
-                && acc < 7u
-            then
-                getVerticalLength coordToInvestigate (acc + 1u)
-            else
-                acc
+                not (belowPredicate c) //Der er allerede et bogstav, så kan være ligeglade med dem der ligger til højre og venstre for det
+            then 
+                getVerticalLength coordToInvestigate acc
+            else //Der er ikke et bogstav, så vi skal også lige tjekke til højre og venstre for næste brik
+                if 
+                    leftPredicate coordToInvestigate
+                    && rightPredicate coordToInvestigate
+                    && acc < 7u
+                then
+                    getVerticalLength coordToInvestigate (acc + 1u)
+                else
+                    acc
         
         let rec getHorizontalLength (c: coord) (acc: uint32) : uint32 =
             let coordToInvestigate: coord = (fst c + 1, snd c)
             if
-                rightPredicate coordToInvestigate
-                && abovePredicate coordToInvestigate
-                && belowPredicate coordToInvestigate
-                && acc < 7u
+                not (rightPredicate c)
             then
-                getHorizontalLength coordToInvestigate (acc + 1u)
+                getHorizontalLength coordToInvestigate acc
             else
-                acc
+                if 
+                    abovePredicate coordToInvestigate
+                    && belowPredicate coordToInvestigate
+                    && acc < 7u
+                then
+                    getHorizontalLength coordToInvestigate (acc + 1u)
+                else
+                    acc
         
         let rec verticalPredicateHandler (c: coord) =
             //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
@@ -161,11 +192,6 @@ module State =
         let verticalStarters = List.fold (fun acc c -> List.append acc (verticalPredicateHandler c)) [] keys
         let horizontalStarters = List.fold (fun acc c -> List.append acc (horizontalPredicateHandler c)) [] keys
         verticalStarters @ horizontalStarters
-    
-    let getPairFromSet (set:Set<char*int>) : char*int = 
-        match (Set.toList set) with
-        | x::xs -> x
-        | [] -> failwith "Should not happen!"
 
     let getStartPoints (boardMap: Map<coord, uint32>) : (coord * coord * (uint32) list * uint32) list =
         getAllStarters boardMap
@@ -179,10 +205,10 @@ module State =
             //debugPrint (sprintf "\nresult (Dict): %A\n" result)
             match result with
             | Some r -> getReadyDict xs (Some (snd r)) pieces
-            | None -> failwith "should not happen. PLEASE!!!"
+            | None -> debugPrint "should not happen. PLEASE!!!"; failwith "should not happen. PLEASE!!!"
         //Case 2: No more letters, return dictionary-level.
         | [], Some d -> d
-        | _, None -> failwith "should not happen. PLEASE!!!"
+        | _, None -> debugPrint "should not happen. PLEASE!!!"; failwith "should not happen. PLEASE!!!"
     
     let getLettersFromStarter s = 
         match s with
@@ -193,56 +219,91 @@ module State =
         match index with
         | Some(i) -> List.removeAt i letters
         | None -> letters
+    
+    let removeTile tile tiles =
+        let index = List.tryFindIndex (fun x -> fst x = fst tile) tiles
+        match index with
+        | Some i -> List.removeAt i tiles
+        | None -> tiles
 
-    let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<uint32>> =
+    let progressCoord (coord:coord) starter :coord =
+        let _, direction, _, _ = starter
+        let dirx, diry = direction
+        let coordx, coordy = coord
+        if dirx = 1
+        then (coordx + 1, coordy)
+        else
+            if diry = 1
+            then (coordx, coordy + 1)
+            else (coordx, coordy)
+
+    let getPairFromTile (set:tile) : char*int = 
+        match (Set.toList set) with
+        | x::xs -> x
+        | [] -> debugPrint "should not happen"; failwith "Should not happen!"
+
+    //Should be named findPossibleMoves
+    let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<(int * int) * (uint32 * (char * int))>> =
         //TODO: Maybe fix duplicate words
         //TODO: Handle wildcard
 
         let _, _, _, possibleLength = starter
+        let tilesFromLetters = List.map (fun id -> (id, Map.find id pieces)) letters
 
-        //1. Define helper function that uses recursion to find all continuations
-        let rec aux (word:list<uint32>) letters auxDict =
-            //Make sure that the length of the current word is not longer than the possible length from the starter
-            if ((uint32) word.Length) >= possibleLength then [] else
-            //2. Fold over all letters available
-            List.fold (fun acc letter ->
-                //3. Use step function to check if a word can be made with the given letter
-                let result = Dictionary.step (fst (getPairFromSet (Map.find letter pieces))) auxDict
-                match result with
-                //3.1 If a word is found, append the the new word to the accumulator and continue the search with the new word. 
-                | Some r when (fst r) -> 
-                    let newWord = List.append word [letter]
-                    (newWord::acc) @ (aux newWord (removeLetter letter letters) (snd r))
-                //3.2 If a word is not found, but the letter is legal, continue the search with the new word.
-                | Some r when not (fst r) ->
-                    let newWord = List.append word [letter]
-                    acc @ (aux newWord (removeLetter letter letters) (snd r))
-                //3.3 If letter is illegal, return empty list.
-                | None -> acc
-            ) [] letters 
-        
-        aux [] letters dict
-    
-    //Remove moves that are longer than what is allowed by the starter
-    let removeImpossibleMoves (moveLength:uint32) moves =
-        if List.isEmpty moves 
-        then List.empty
-        else List.filter (fun l -> List.length l <= int moveLength) moves
+        let rec newAux coord (currentMove:list<(int * int) * (uint32 * (char * int))>) (tiles:list<uint32 * tile>) auxDict : list<list<(int * int) * (uint32 * (char * int))>> =
+            if ((uint32) currentMove.Length) >= possibleLength then [] else
+            let wordAtCoord = Map.tryFind coord state.customBoard
+            List.fold (fun moves tile -> 
+            //1. Try to find out if a letter has already been placed at the current coord
+                match wordAtCoord with
+                | None -> 
+                    if Set.count (snd tile) > 1 && List.fold (fun boolAcc tile -> if (fst tile) = 0u && Set.count (snd tile) = 1 then false else boolAcc) true tiles
+                    then 
+                        Set.fold (fun wildcardAcc wildcardTile -> wildcardAcc @ (newAux coord currentMove ((0u, Set.empty.Add wildcardTile)::(removeTile tile tiles)) auxDict)) moves (snd tile)
+                    else 
+                        //2. If no letter has been placed at the current coord, continue searching through the trie to find possible moves.
+                        let stepResult = Dictionary.step (fst (getPairFromSet (snd tile))) auxDict
+                        match stepResult with
+                            //3.1 If a word is found, append the the new word to the accumulator and continue the search with the new word. 
+                            | Some r when (fst r) -> 
+                                let nextCoord = progressCoord coord starter
+                                let nextCoordTile = Map.tryFind nextCoord state.customBoard
+                                match nextCoordTile with
+                                | Some _ ->
+                                    let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                    moves @ (newAux nextCoord newMove (removeTile tile tiles) (snd r))
+                                | None ->
+                                    let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                    (newMove::moves) @ (newAux nextCoord newMove (removeTile tile tiles) (snd r))
+                            //3.2 If a word is not found, but the letter is legal, continue the search with the new word.
+                            | Some r when not (fst r) ->
+                                let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                moves @ (newAux (progressCoord coord starter) newMove (removeTile tile tiles) (snd r))
+                            //3.3 If letter is illegal, return the moves currently found through this path list.
+                            | None -> moves
+                | Some letterAtCoordId -> 
+                    //3. If a letter HAS been placed at the current coord, step into the dictionary with that letter and keep the search going (Note: Nothing is being added to currentMove, as we are not placing a new tile ourselves)
+                    let letterAtCoord = Map.find letterAtCoordId pieces
+                    let letterAtCoordAsChar = fst (getPairFromSet letterAtCoord)
+                    let stepResult = Dictionary.step letterAtCoordAsChar auxDict
+                    match stepResult with
+                        //3.1 If a word is found, append the the new word to the accumulator and continue the search with the new word. 
+                        | Some r when (fst r) -> 
+                            currentMove::moves @ (newAux (progressCoord coord starter) currentMove tiles (snd r))
+                        | Some r when not (fst r) ->
+                            moves @ (newAux (progressCoord coord starter) currentMove tiles (snd r))
+                        //3.3 If letter is illegal, return empty list.
+                        | None -> moves
+            ) [] tiles
+
+        let starterCoord, _, _, _ = starter
+        newAux (progressCoord starterCoord starter) [] tilesFromLetters dict
 
     //Finds the longest move from a list of moves
     let findLongestMove (moves:list<list<'a>>) : list<'a> = 
         if List.isEmpty moves 
         then List.empty
         else List.maxBy (fun move -> move.Length) moves
-
-    //Converts a continuation of the form list<uint32> (which is a list of the id's of a continuation) to a move.
-    let continuationToMove (continuation:list<uint32>) (startCoord:coord) (direction:coord) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> = 
-        List.fold (fun acc letter -> (
-            let tile = Map.find letter pieces
-            if fst direction = 1 
-            then List.append acc [(((fst startCoord) + acc.Length + 1, snd startCoord), (letter, (getPairFromSet tile)))]
-            else List.append acc [((fst startCoord, (snd startCoord) + acc.Length + 1), (letter, (getPairFromSet tile)))]
-        )) [] continuation
 
     //Gets a list of possible words for a given starter
     let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
@@ -251,14 +312,8 @@ module State =
         //2. Get letters as list so they can be folded over.
         let letters = MultiSet.toList state.hand
         //3. Get a list of possible continuations of the starter
-        let possibleContinuations = findPossibleContinuations state readyDict letters pieces starter //|> removeImpossibleMoves (getLengthFromStarter starter)
-        let longestContinuation = findLongestMove possibleContinuations
-        //debugPrint (sprintf "\nlongestContinuation: %A\n" longestContinuation)
-        
-        //Get startCoord and direction for starter and use that to make an actual move
-        let startCoord, direction, _, _ = starter
-        let starterCoords = (startCoord, direction)
-        continuationToMove longestContinuation (fst starterCoords) (snd starterCoords) pieces
+        let possibleMoves = findPossibleContinuations state readyDict letters pieces starter
+        findLongestMove possibleMoves
         
     //Finds all possible moves and returns longest one
     let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
@@ -283,9 +338,9 @@ module State =
             sprintf
                 "\nTotal players: %d | Our number: %d | total turns: %d | current player turn: %d | Enough tiles: %b \n"
                 st.numberOfPlayers
-                (st.playerNumber + 1u)
+                st.playerNumber
                 st.PlayerTurn
-                ((st.PlayerTurn % st.numberOfPlayers) + 1u)
+                (st.PlayerTurn % st.numberOfPlayers)
                 st.canChange
         )
 
@@ -339,11 +394,14 @@ module Scrabble =
                 // debugPrint (sprintf "\nnewPieces %A\n" (newPieces))
                 (* Successful play by you. Update your state (remove old tiles, add the new ones, change turn, etc) *)
                 //Update hand
+
+                //let newPiecesWithTwoWildcards = newPieces.Tail.Tail |> List.append [(0, 2 )]
+
                 let piecesToBeRemoved: MultiSet<uint32> = List.fold (fun acc (_, (id, (_, _))) -> add id 1u acc) MultiSet.empty ms
                 let handAfterRemove = State.removeFromHand st.hand piecesToBeRemoved
                 let handAfterAdd = State.addToHand handAfterRemove newPieces
                 //Update board
-                let updatedCustomBoard = State.updateCustomBoard ms st.customBoard
+                let updatedCustomBoard = State.updateCustomBoard ms st.customBoard pieces
                 //Make new state
                 let st' =
                     State.mkState
@@ -359,7 +417,7 @@ module Scrabble =
             | RCM(CMPlayed(pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
                 //Update board
-                let updateCustomBoard = State.updateCustomBoard ms st.customBoard
+                let updateCustomBoard = State.updateCustomBoard ms st.customBoard pieces
                 //Make new state
                 let st' =
                     State.mkState
