@@ -55,9 +55,10 @@ module State =
           playerNumber: uint32
           PlayerTurn: uint32
           hand: MultiSet.MultiSet<uint32>
-          canChange: bool }
+          canChange: bool
+          droppedPlayers: list<uint32> }
 
-    let mkState b sb d np pn pt h tl =
+    let mkState b sb d np pn pt h tl dp =
         { board = b
           customBoard = sb
           dict = d
@@ -65,7 +66,8 @@ module State =
           playerNumber = pn
           PlayerTurn = pt
           hand = h
-          canChange = tl }
+          canChange = tl
+          droppedPlayers = dp }
 
     let getPairFromSet (set:Set<char*int>) : char*int = 
         match (Set.toList set) with
@@ -435,7 +437,24 @@ module Scrabble =
 
     let playGame cstream pieces (st: State.state) =
         let rec aux (st: State.state) =
-            let totalTilesLeft = 100u
+
+            if List.contains (st.PlayerTurn % st.numberOfPlayers) st.droppedPlayers
+            then
+                debugPrint "\nincrementing turn\n"
+                let st' =
+                    State.mkState
+                        st.board
+                        st.customBoard
+                        st.dict
+                        st.numberOfPlayers
+                        st.playerNumber
+                        (st.PlayerTurn + 1u)
+                        st.hand
+                        st.canChange
+                        st.droppedPlayers
+                aux st'
+                ()
+            
             let itIsMyTurn = st.playerNumber = (st.PlayerTurn % st.numberOfPlayers)
             if itIsMyTurn then
                 State.printStatus st
@@ -500,6 +519,7 @@ module Scrabble =
                         (st.PlayerTurn + 1u)
                         handAfterAdd
                         st.canChange
+                        st.droppedPlayers
                 aux st'
             | RCM(CMPlayed(pid, ms, points)) ->
                 (* Successful play by other player. Update your state *)
@@ -516,6 +536,7 @@ module Scrabble =
                         (st.PlayerTurn + 1u)
                         st.hand
                         st.canChange
+                        st.droppedPlayers
                 aux st'
             | RCM(CMPlayFailed(pid, ms)) ->
                 (* Failed play. Update your state *)
@@ -529,6 +550,7 @@ module Scrabble =
                         (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                         st.hand
                         st.canChange
+                        st.droppedPlayers
                 // This state needs to be updated
                 aux st'
             | RCM(CMGameOver _) -> ()
@@ -543,6 +565,7 @@ module Scrabble =
                         (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                         st.hand
                         st.canChange
+                        st.droppedPlayers
                 // This state needs to be updated
                 aux st'
             | RCM(CMChangeSuccess(newTiles)) -> 
@@ -559,6 +582,7 @@ module Scrabble =
                         (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                         handAfterAdd
                         st.canChange
+                        st.droppedPlayers
                 // This state needs to be updated
                 aux st'
             | RCM(CMPassed pid) -> 
@@ -572,6 +596,22 @@ module Scrabble =
                         (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                         st.hand
                         st.canChange
+                        st.droppedPlayers
+                // This state needs to be updated
+                aux st'
+            | RCM (CMForfeit pid) ->
+                debugPrint (sprintf "\nthis guy forfeited: %A\n" pid)
+                let st' =
+                    State.mkState
+                        st.board
+                        st.customBoard
+                        st.dict
+                        st.numberOfPlayers
+                        st.playerNumber
+                        (st.PlayerTurn + 1u) // Remember that when reading the value we have to
+                        st.hand
+                        st.canChange
+                        (pid-1u::st.droppedPlayers)
                 // This state needs to be updated
                 aux st'
             | RCM a -> failwith (sprintf "not implmented: %A" a)
@@ -597,6 +637,7 @@ module Scrabble =
                             (st.PlayerTurn + 1u) // Remember that when reading the value we have to
                             st.hand
                             false
+                            st.droppedPlayers
                     aux st'
                 else
                     aux st
@@ -639,4 +680,4 @@ module Scrabble =
             playGame
                 cstream
                 tiles
-                (State.mkState board Map.empty dict numPlayers (playerNumber - 1u) (playerTurn - 1u) handSet true)
+                (State.mkState board Map.empty dict numPlayers (playerNumber - 1u) (playerTurn - 1u) handSet true List.empty)
