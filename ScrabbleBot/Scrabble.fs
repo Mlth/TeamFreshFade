@@ -234,7 +234,7 @@ module State =
             //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
             if belowPredicate c && abovePredicate c then
                 [ (c, ((0, -1): coord), [ Map.find c boardMap ], getRevVerticalLength c 0u) ]
-            else if belowPredicate c && not (abovePredicate c) then
+            else if abovePredicate c && not (belowPredicate c) then
                 [ (c, ((0, -1): coord), getLettersBelowCoord c [ Map.find c boardMap ], getRevVerticalLength c 0u) ]
             else
                 []
@@ -252,7 +252,7 @@ module State =
             //If both above and below is clear, return list with starter for down direction (Can be extended to both up and down direction if we want to look for both).
             if rightPredicate c && leftPredicate c then
                 [ (c, ((-1, 0): coord), [ Map.find c boardMap ], getRevHorizontalLength c 0u) ]
-            else if rightPredicate c && not (leftPredicate c) then
+            else if leftPredicate c && not (rightPredicate c) then
                 [ (c, ((-1, 0): coord), getLettersRightOfCoord c [ Map.find c boardMap ], getRevHorizontalLength c 0u) ]
             else
                 []
@@ -390,7 +390,7 @@ module State =
         let letters = MultiSet.toList state.hand
         let aux starter =
             match starter with
-            |_, (x, y), _, _ when x < 0 or y < 0 -> 
+            |_, (x, y), _, _ when x < 0 || y < 0 -> 
                 match (Dictionary.step '>' state.dict) with 
                 | Some(false, dict) -> dict 
                 | _ -> failwith "should never happen"
