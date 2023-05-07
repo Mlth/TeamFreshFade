@@ -325,14 +325,14 @@ module State =
         | [] -> debugPrint "should not happen"; failwith "Should not happen!"
 
     //Should be named findPossibleMoves
-    let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<(int * int) * (uint32 * (char * int))>> =
+    let findPossibleContinuations (state:state) (dict:Dictionary.Dict) (letters:uint32 list) (pieces:Map<uint32, tile>) (starter:coord * coord * list<uint32> * uint32) : list<list<(int * int) * (uint32 * (char * int))>*int> =
         //TODO: Maybe fix duplicate words
 
         let _, _, _, possibleLength = starter
         let tilesFromLetters = List.map (fun id -> (id, Map.find id pieces)) letters
 
-        let rec newAux coord (currentMove:list<(int * int) * (uint32 * (char * int))>) (tiles:list<uint32 * tile>) auxDict : list<list<(int * int) * (uint32 * (char * int))>> =
-            if ((uint32) currentMove.Length) >= possibleLength then [] else
+        let rec newAux coord (currentMove:list<(int * int) * (uint32 * (char * int))>*int) (tiles:list<uint32 * tile>) auxDict : list<list<(int * int) * (uint32 * (char * int))>*int> =
+            if ((uint32) (fst currentMove).Length) >= possibleLength then [] else
             let wordAtCoord = Map.tryFind coord state.customBoard
             List.fold (fun moves tile -> 
             //1. Try to find out if a letter has already been placed at the current coord
@@ -351,14 +351,14 @@ module State =
                                 let nextCoordTile = Map.tryFind nextCoord state.customBoard
                                 match nextCoordTile with
                                 | Some _ ->
-                                    let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                    let newMove = (List.append (fst currentMove) ([coord, (fst tile, getPairFromSet(snd tile))]), snd currentMove + 1)
                                     moves @ (newAux nextCoord newMove (removeTile tile tiles) (snd r))
                                 | None ->
-                                    let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                    let newMove = (List.append (fst currentMove) [coord, (fst tile, getPairFromSet(snd tile))], snd currentMove + 1)
                                     (newMove::moves) @ (newAux nextCoord newMove (removeTile tile tiles) (snd r))
                             //3.2 If a word is not found, but the letter is legal, continue the search with the new word.
                             | Some r when not (fst r) ->
-                                let newMove = List.append currentMove [coord, (fst tile, getPairFromSet(snd tile))]
+                                let newMove = (List.append (fst currentMove) [coord, (fst tile, getPairFromSet(snd tile))], snd currentMove + 1)
                                 moves @ (newAux (progressCoord coord starter) newMove (removeTile tile tiles) (snd r))
                             //3.3 If letter is illegal, return the moves currently found through this path list.
                             | None -> moves
@@ -370,24 +370,29 @@ module State =
                     match stepResult with
                         //3.1 If a word is found, append the the new word to the accumulator and continue the search with the new word. 
                         | Some r when (fst r) -> 
-                            currentMove::moves @ (newAux (progressCoord coord starter) currentMove tiles (snd r))
+                            let nextCoord = progressCoord coord starter
+                            let nextCoordTile = Map.tryFind nextCoord state.customBoard
+                            match nextCoordTile with
+                            | Some _ ->
+                                moves @ (newAux (progressCoord coord starter) (fst currentMove, snd currentMove + 1) tiles (snd r))
+                            | None ->
+                                currentMove::moves @ (newAux (progressCoord coord starter) (fst currentMove, snd currentMove + 1) tiles (snd r))
                         | Some r when not (fst r) ->
-                            moves @ (newAux (progressCoord coord starter) currentMove tiles (snd r))
+                            moves @ (newAux (progressCoord coord starter) (fst currentMove, snd currentMove + 1) tiles (snd r))
                         //3.3 If letter is illegal, return empty list.
                         | None -> moves
             ) [] tiles
 
         let starterCoord, _, _, _ = starter
-        newAux (progressCoord starterCoord starter) [] tilesFromLetters dict
+        newAux (progressCoord starterCoord starter) ([], 0) tilesFromLetters dict
 
     //Finds the longest move from a list of moves
-    let findLongestMove (moves:list<list<'a>>) : list<'a> = 
-        if List.isEmpty moves 
-        then List.empty
-        else List.maxBy (fun move -> move.Length) moves
+    let findLongestMove (moves:list<list<'a>*int>) : list<'a>*int = 
+        List.fold (fun longestMove move -> if (snd move) > (snd longestMove) then move else longestMove) ([], 0) moves
+        
 
     //Gets a list of possible words for a given starter
-    let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
+    let getLongestStarterOption (starter:coord * coord * list<uint32> * uint32) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))>*int =
         //2. Get letters as list so they can be folded over.
         let letters = MultiSet.toList state.hand
         let aux starter =
@@ -404,9 +409,9 @@ module State =
         findLongestMove possibleMoves
         
     //Finds all possible moves and returns longest one
-    let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))> =
+    let getMove (starters: list<coord * coord * list<uint32> * uint32>) (state:state) (pieces:Map<uint32, tile>) : list<(int * int) * (uint32 * (char * int))>*int =
         //1. Folds over all starters and returns all possible moves. 
-        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>>) starter -> (getLongestStarterOption starter state pieces)::acc) [] starters
+        let allMoves = List.fold (fun (acc:list<list<(int * int) * (uint32 * (char * int))>*int>) starter -> (getLongestStarterOption starter state pieces)::acc) [] starters
         //2. Finds the longest AKA the best move
         findLongestMove allMoves
 
@@ -466,7 +471,7 @@ module Scrabble =
                 if st.customBoard.IsEmpty
                 then 
                     //Get the best word for first move and play it
-                    let move = State.getFirstMove st pieces
+                    let move = fst (State.getFirstMove st pieces)
                     if move.IsEmpty || move.Length < 3 
                     then
                         debugPrint (sprintf "Player %d: Trying to change tiles in hand\n" st.playerNumber) // keep the debug lines. They are useful.
@@ -480,7 +485,7 @@ module Scrabble =
                     //Get possible starting points for words. If there are none
                     let startingPoints = State.getStartPoints st.customBoard
                     //Get the best move as a list<(int * int) * (uint32 * (char * int))
-                    let move = State.getMove startingPoints st pieces
+                    let move = fst (State.getMove startingPoints st pieces)
                     if move.IsEmpty 
                     then 
                         debugPrint (sprintf "Player %d -> Server: Trying to change tiles in hand\n" st.playerNumber ) // keep the debug lines. They are useful.
